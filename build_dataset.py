@@ -395,6 +395,20 @@ def main():
     os.makedirs("data", exist_ok=True)
     os.makedirs("checkpoints", exist_ok=True)
     
+    # Colab High-Speed Local SSD Cache Detection
+    is_colab = os.path.exists("/content")
+    active_corpus_path = corpus_path
+    
+    if is_colab:
+        active_corpus_path = "/content/corpus_local.txt"
+        if os.path.exists(corpus_path) and not os.path.exists(active_corpus_path):
+            print(f"🔄 Colab detected. Restoring existing corpus from Google Drive to local SSD for fast streaming...")
+            try:
+                shutil.copy(corpus_path, active_corpus_path)
+                print("✅ Restoration complete.")
+            except Exception as e:
+                print(f"⚠️ Restoration failed: {e}")
+    
     # 1. Establish state and resume history
     state = {"target_gb": args.target_gb, "completed_sources": []}
     if os.path.exists(STATE_FILE):
@@ -420,20 +434,21 @@ def main():
     else:
         source_targets[args.source] = int(target_bytes)
         
-    # 2. Rebuild deduplication index streamingly
-    dedup_hashes = rebuild_dedup_set(corpus_path)
+    # 2. Rebuild deduplication index streamingly on active local path
+    dedup_hashes = rebuild_dedup_set(active_corpus_path)
     
     print("\n" + "=" * 60)
     print(f" 🚀 RAVEN-2 CORPUS SYSTEM INITIALIZED")
-    print(f"  Target File:      {corpus_path}")
-    print(f"  Target Capacity:  {args.target_gb:.2f} GB")
+    print(f"  Target File (Active): {active_corpus_path}")
+    print(f"  Target File (Drive):  {corpus_path}")
+    print(f"  Target Capacity:      {args.target_gb:.2f} GB")
     for src in active_sources:
         status = "COMPLETED" if src in state["completed_sources"] else "PENDING"
         print(f"  - {src:12s}: {source_targets[src]/(1024**3):.2f} GB ({status})")
     print("=" * 60 + "\n")
     
-    # Open dataset file in append mode to support resumption
-    with open(corpus_path, "a", encoding="utf-8") as out_file:
+    # Open active dataset file in append mode to support resumption
+    with open(active_corpus_path, "a", encoding="utf-8") as out_file:
         write_buffer = []
         buffer_size_chars = 0
         LIMIT_BUFFER_BYTES = 8 * 1024 * 1024 # 8 MB write block buffer
@@ -520,11 +535,19 @@ def main():
             with open(STATE_FILE, "w") as sf:
                 json.dump(state, sf, indent=2)
                 
-            # Perform automatic Drive backup sync
-            backup_to_drive(corpus_path)
+            # Perform automatic Drive backup sync of completed source chunk
+            if is_colab:
+                try:
+                    print(f"\n☁️ Syncing completed progress to Google Drive ({corpus_path})...")
+                    shutil.copy(active_corpus_path, corpus_path)
+                    print("✅ Backup complete.")
+                except Exception as e:
+                    print(f"\n⚠️ Drive synchronization failed: {e}")
+            else:
+                backup_to_drive(corpus_path)
             
     print("\n🎉 RAVEN-2 CORPUS GENERATION COMPLETED SUCCESSFULLY!")
-    validate_dataset(corpus_path)
+    validate_dataset(active_corpus_path)
 
 if __name__ == "__main__":
     main()

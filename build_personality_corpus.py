@@ -586,8 +586,16 @@ def build_personality_corpus(target_count: int = 50_000) -> Path:
 
     total_written = 0
     seen = set()
+    
+    is_colab = os.path.exists("/content")
+    active_output_file = OUTPUT_FILE
+    if is_colab:
+        active_output_file = Path("/content/personality_local.txt")
+        print(f"⚡ Colab detected! Local NVMe SSD enabled for max-speed streaming generation...")
+        print(f"⚡ Staging File: {active_output_file}")
+        print(f"⚡ Target File:  {OUTPUT_FILE}\n")
 
-    with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
+    with open(active_output_file, "w", encoding="utf-8") as f:
         for cat, pairs, target in scaled:
             written = 0
             pair_cycle = cycle(pairs)
@@ -614,19 +622,29 @@ def build_personality_corpus(target_count: int = 50_000) -> Path:
                 written      += 1
                 total_written += 1
 
-                if written % 1000 == 0:
+                if written % 5000 == 0:  # Increase progress interval for large targets to avoid stdout spam
                     print(f"    [{cat}] {written:,}/{target:,}", end="\r")
 
             print(f"    [{cat}] ✓ {written:,} pairs written" + " " * 20)
 
     # Stats
-    size_kb = OUTPUT_FILE.stat().st_size / 1024
+    size_kb = active_output_file.stat().st_size / 1024
     print(f"\n✓ Total pairs written: {total_written:,}")
     print(f"✓ File size:           {size_kb:.1f}KB ({size_kb/1024:.2f}MB)")
-    print(f"✓ Saved to:            {OUTPUT_FILE.absolute()}")
+    print(f"✓ Saved to:            {active_output_file.absolute()}")
 
-    # Drive backup
-    if Path("/content/drive").exists():
+    # Drive / Local Workspace sync
+    if is_colab:
+        try:
+            import shutil
+            print(f"\n📤 Transferring finalized {size_kb/1024:.2f}MB corpus from local SSD to Drive destination ({OUTPUT_FILE})...")
+            shutil.copy(active_output_file, OUTPUT_FILE)
+            print("✨ Google Drive synchronization complete!")
+        except Exception as e:
+            print(f"⚠️ Destination transfer failed: {e}")
+
+    # Drive backup (fallback path)
+    if Path("/content/drive").exists() and not is_colab:
         try:
             import shutil
             DRIVE_PATH.mkdir(parents=True, exist_ok=True)
