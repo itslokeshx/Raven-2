@@ -1,31 +1,82 @@
-# 🐦‍⬛ RAVEN-2: 100M Parameter Production-Grade AI Agent
+# 🐦‍⬛ RAVEN-2: An Experimental 100M Parameter Transformer
 
-RAVEN-2 is a complete, production-grade 100M parameter language model codebase built entirely from scratch in PyTorch. It features modern LLM architecture enhancements (RMSNorm, RoPE, SwiGLU, Grouped Query Attention, Flash Attention, and dynamic KV Caching) optimized for single-GPU training and Google Colab environments.
+RAVEN-2 is a simple, educational 100M parameter language model codebase written in PyTorch. It implements standard modern transformer components (RMSNorm, RoPE, SwiGLU, Grouped Query Attention, and a basic KV cache) to provide a clear, hands-on environment for training and experimenting on a single GPU or Google Colab.
 
 ---
 
 ## 🎛️ Architecture Specifications
 
-The architecture of RAVEN-2 is mathematically designed to match modern state-of-the-art models like LLaMA and Mistral:
+The model architecture is configured with standard parameters common to modern open-weight architectures, scaled down for fast training and testing.
 
-### 1. Root Mean Square Normalization (RMSNorm)
-RMSNorm replaces standard LayerNorm by normalizing inputs by their root mean square without subtracting the mean, improving computing speed and stability:
+### Hyperparameters
+
+| Spec / Parameter | Value | Description / Formula |
+| :--- | :--- | :--- |
+| **Vocabulary Size ($V$)** | `16,384` | Tokens trained via a basic Byte-Level BPE tokenizer |
+| **Context Length (Block Size)** | `1,024` tokens | Maximum sequence length supported by the attention layers |
+| **Embedding Dimension ($d$)** | `768` | Hidden size of the transformer layers |
+| **Query Heads ($N_{\text{head}}$)** | `12` | Number of attention heads for Query projections |
+| **Key/Value Heads ($N_{\text{kv\_head}}$)** | `4` | Key/Value heads shared across Query heads (Group size = 3) |
+| **Decoder Layers ($N_{\text{layer}}$)** | `12` | Total number of transformer decoder blocks |
+| **Activation Function** | SwiGLU | Swish-Gated Linear Units with `ffn_mult = 4.5` |
+| **Feed-Forward Hidden Dim** | `2,304` | Computed as: $\text{round}(n_{\text{embd}} \times f_{\text{mult}} \times \frac{2}{3 \times 256}) \times 256$ |
+| **Total Parameter Count** | `~100M` | Unique parameters (excluding tied embedding weights) |
+
+---
+
+### Component Implementations
+
+#### 1. Root Mean Square Normalization (RMSNorm)
+RMSNorm is used instead of standard LayerNorm to reduce computational overhead by normalizing inputs by their root mean square:
 $$\text{RMSNorm}(x) = \frac{x}{\sqrt{\frac{1}{d} \sum_{i=1}^d x_i^2 + \epsilon}} \odot \gamma$$
-Where $\gamma$ is a learnable scaling parameter. No bias parameters are used.
+Where $\gamma$ is a learnable scaling parameter. No bias weights are configured in the normalization layers.
 
-### 2. Rotary Position Embeddings (RoPE)
-Positions are encoded by rotating adjacent pairs of dimension components of the Query ($Q$) and Key ($K$) tensors:
+#### 2. Rotary Position Embeddings (RoPE)
+Positional information is applied by rotating query and key components:
 $$\begin{pmatrix} rx_{2i-1} \\ rx_{2i} \end{pmatrix} = \begin{pmatrix} \cos \theta_i & -\sin \theta_i \\ \sin \theta_i & \cos \theta_i \end{pmatrix} \begin{pmatrix} x_{2i-1} \\ x_{2i} \end{pmatrix}$$
 Where $\theta_i = \text{base}^{-2(i-1)/d} \cdot t$ represents the frequency scaling for position index $t$.
 
-### 3. SwiGLU Activation Function
-The feed-forward network employs SwiGLU projections, scaling the hidden dimension based on the LLaMA-2 formula:
-$$\text{SwiGLU}(x) = \text{Swish}(x W_{gate}) \cdot (x W_{up})$$
-$$\text{hidden\_dim} = \text{round}\left(n_{\text{embd}} \times f_{\text{mult}} \times \frac{2}{3 \times 256}\right) \times 256$$
-For $n_{\text{embd}} = 768$ and $f_{\text{mult}} = 4.5$, the resulting feed-forward hidden dimension is exactly **2304**.
+#### 3. SwiGLU Activation Function
+The feed-forward network uses SwiGLU projections:
+$$\text{SwiGLU}(x) = \text{Swish}(x W_{\text{gate}}) \cdot (x W_{\text{up}})$$
+With our hyperparameter selections, the feed-forward layer maps to a hidden dimension of **2,304**.
 
-### 4. Grouped Query Attention (GQA)
-Implements grouped attention to balance memory throughput and capability. With $n_{\text{head}} = 12$ and $n_{\text{kv\_head}} = 4$, every Key/Value head is shared across exactly 3 Query heads (GQA group size = 3). Includes full compatibility with PyTorch's native FlashAttention (`F.scaled_dot_product_attention`).
+#### 4. Grouped Query Attention (GQA)
+Key and Value heads are shared across Query heads to reduce memory bandwidth usage during sequence generation. The code uses PyTorch's native scaled dot-product attention (`F.scaled_dot_product_attention`).
+
+---
+
+## 🛠️ Data & Training Workflow
+
+The training pipeline is structured in three consecutive phases, moving from raw text datasets to custom fine-tuning.
+
+```mermaid
+flowchart TD
+    %% Styling
+    classDef pretrain fill:#1e1e2e,stroke:#3b82f6,stroke-width:1px,color:#cdd6f4;
+    classDef instruct fill:#1e1e2e,stroke:#10b981,stroke-width:1px,color:#cdd6f4;
+    classDef personality fill:#1e1e2e,stroke:#8b5cf6,stroke-width:1px,color:#cdd6f4;
+    classDef data fill:#1e1e2e,stroke:#6c7086,stroke-width:1px,color:#cdd6f4;
+
+    subgraph PREP ["Data Compilation & Preparation"]
+        A["HF Web-Edu Corpus<br>(Stream-downloaded)"]:::data --> C["Unified Text Corpus<br>(data/corpus.txt)"]:::data
+        B["Personality Dialogue<br>(Programmatically generated)"]:::data --> C
+        C --> D["BPE Tokenizer Training<br>(tokenizer_train.py)"]:::data
+        D --> E["Binary Packing<br>(data/data_prep.py)"]:::data
+    end
+
+    subgraph PHASE1 ["Phase 1: Pre-training"]
+        E --> F["Base Autoregressive Training<br>(train.py)"]:::pretrain
+    end
+
+    subgraph PHASE2 ["Phase 2: Instruction Tuning"]
+        F --> G["Instruction Fine-Tuning<br>(instruct_tune.py)"]:::instruct
+    end
+
+    subgraph PHASE3 ["Phase 3: Personality Alignment"]
+        G --> H["Personality Tuning<br>(posttrain.py)"]:::personality
+    end
+```
 
 ---
 
@@ -33,106 +84,107 @@ Implements grouped attention to balance memory throughput and capability. With $
 
 ```
 Raven-2/
-├── config.py                     # All architectural specs, hyperparameters & token IDs
-├── model.py                      # RMSNorm, RoPE, SwiGLU, GQA, KV Cache & Generation
-├── requirements.txt              # Project third-party python dependencies
-├── tokenizer_train.py            # 16K BPE Byte-Level Tokenizer training script
-├── train.py                      # Pre-training loop (Cosine Warmup, AMP, Drive, Ctrl+C)
-├── instruct_tune.py              # Instruction tuning (Loss masking on System/User tokens)
-├── posttrain.py                  # Personality tuning (Raven sarcastic, dry, direct voice)
-├── inference.py                  # Interactive CLI chat client (Modes, 5-turn history)
-├── app.py                        # Premium, dark monochrome Gradio Web UI block
-├── .gitignore                    # Version control ignore files
-├── README.md                     # Comprehensive architecture manual (this file)
+├── config.py                     # Hyperparameters and model configuration parameters
+├── model.py                      # Core model definitions (RMSNorm, RoPE, SwiGLU, GQA, KV Cache)
+├── requirements.txt              # Project third-party dependencies
+├── tokenizer_train.py            # Simple BPE tokenizer training script
+├── train.py                      # Standard pre-training loop with cosine decay
+├── instruct_tune.py              # Basic instruction fine-tuning loop
+├── posttrain.py                  # Fine-tuning script for personality alignment
+├── inference.py                  # Command-line chat client with conversation history
+├── app.py                        # Simple Gradio Web UI for model interaction
+├── .gitignore                    # Git ignore configurations
+├── README.md                     # Project documentation (this file)
 ├── data/
-│   ├── build_dataset.py          # 40GB high-intelligence HF streaming corpus compiler
-│   ├── build_personality_corpus.py # Programmatic 50K personality training set generator
-│   ├── build_instruct_data.py    # Programmatic 50K high-quality QA dataset generator
-│   ├── download_data.py          # Factual data downloader with filtering & deduplication
-│   ├── combine_to_1gb.py         # Shuffling & chunking raw corpus tool
-│   └── data_prep.py              # Streaming binary data packer (uint16 memmap & cache)
+│   ├── build_dataset.py          # Script to stream and download open datasets
+│   ├── build_personality_corpus.py # Script to programmatically generate personality dialogues
+│   ├── build_instruct_data.py    # Script to programmatically generate instruction pairs
+│   ├── download_data.py          # Data downloader helper
+│   ├── combine_to_1gb.py         # Helper script to shuffle and chunk raw text
+│   └── data_prep.py              # Script to pack text files into binary memory-mapped files
 ├── eval/
-│   ├── knowledge_bench.py        # 100 fact-based Wikipedia QA checks
-│   ├── reasoning_bench.py        # 50 mathematical/logic/analogy checks
-│   └── run_full_eval.py          # Complete evaluation portal (Scores & Coherence)
+│   ├── knowledge_bench.py        # Small set of Wikipedia factual checks
+│   ├── reasoning_bench.py        # Basic mathematical and logical checks
+│   └── run_full_eval.py          # Evaluation runner script
 └── notebooks/
-    ├── colab_pretrain.ipynb      # Automated pre-training pipeline notebook
-    ├── colab_instruct.ipynb      # Automated instruction fine-tuning notebook
-    └── colab_posttrain.ipynb     # Automated personality post-training notebook
+    ├── colab_pretrain.ipynb      # Basic pre-training Jupyter notebook
+    ├── colab_instruct.ipynb      # Basic instruction fine-tuning Jupyter notebook
+    └── colab_posttrain.ipynb     # Basic post-training Jupyter notebook
 ```
 
 ---
 
-## 🚀 Execution & Pipeline Guide
+## 🚀 Step-by-Step Run Guide
 
-### 1. Install Environment Dependencies
-Verify that you are using Python 3.10+ and install dependencies:
+### 1. Environment Setup
+Install the necessary requirements (Python 3.10+ recommended):
 ```bash
 pip3 install -r requirements.txt
 ```
 
 ### 2. Download and Compile Raw Text Corpus
-Run the pre-training corpus compiler to stream and build maximum intelligence:
+Download raw training text streamingly from open sources (such as FineWeb-Edu):
 ```bash
-python3 data/build_dataset.py --target_gb 2     # Quick test with 2GB subset
-python3 data/build_dataset.py --target_gb 40    # Full 40GB SmolLM-mix build
+python3 data/build_dataset.py --target_gb 2     # Build a small 2GB subset for testing
+python3 data/build_dataset.py --target_gb 40    # Build a larger 40GB corpus
 ```
 
-### 3. Train the Byte-Level BPE Tokenizer
-Train a vocabulary of 16,384 tokens on your compiled corpus text:
+### 3. Train the Tokenizer
+Train a custom Byte-Level BPE tokenizer on the downloaded corpus:
 ```bash
 python3 tokenizer_train.py
 ```
-*This step creates `checkpoints/raven2_tokenizer.json` and verifies that `<|pad|>` (0), `<|user|>` (1), `<|raven|>` (2), `<|eos|>` (3), and `<|system|>` (4) are locked in.*
+*This output writes `checkpoints/raven2_tokenizer.json` and assigns special tokens: `<|pad|>` (0), `<|user|>` (1), `<|raven|>` (2), `<|eos|>` (3), and `<|system|>` (4).*
 
-### 4. Build the Instruction Fine-Tuning Dataset
-Compile 50,000 highly structured system, user, and raven dialogue pairs:
+### 4. Build the Instruction Dataset
+Generate a synthetic dataset of instruction-response pairs:
 ```bash
 python3 data/build_instruct_data.py --dry-run
 python3 data/build_instruct_data.py
 ```
 
-### 5. Pack Binary Memory-Mapped Files
-Convert textual strings into zero-copy, highly efficient binary uint16 representations for model training:
+### 5. Pack Text into Binary Format
+Convert text corpora into standard uint16 binary files for memory-mapped training:
 ```bash
-python3 data/data_prep.py --mode pretrain      # Packs checkpoints/train.bin & val.bin
-python3 data/data_prep.py --mode instruct      # Packs checkpoints/instruct.bin & instruct_val.bin
+python3 data/data_prep.py --mode pretrain      # Prepares checkpoints/train.bin and val.bin
+python3 data/data_prep.py --mode instruct      # Prepares checkpoints/instruct.bin and instruct_val.bin
 ```
 
 ### 6. Phase 1: Pre-training
-Train the model autoregressively on base factual knowledge:
+Start base autoregressive pre-training:
 ```bash
-python3 train.py --dry-run                # Train for 20 quick test steps
-python3 train.py                          # Full pre-training execution
+python3 train.py --dry-run                # Runs a short 20-step test
+python3 train.py                          # Starts full pre-training
 ```
-*Gradients accumulate automatically. Checks validation loss, backs up to Google Drive if active in Colab, and saves checkpoints cleanly to `checkpoints/raven2_pretrain_best.pt`.*
+*The script saves checkpoint states to `checkpoints/raven2_pretrain_best.pt` during training.*
 
 ### 7. Phase 2: Instruction Fine-Tuning
-Execute fine-tuning with custom target loss masking (model only learns to predict the assistant's tokens):
+Fine-tune the model using target loss masking:
 ```bash
-python3 instruct_tune.py                  # Instruction fine-tuning
+python3 instruct_tune.py
+```
+*In this step, loss is calculated only on the assistant's output tokens, ignoring prompt inputs.*
+
+### 8. Phase 3: Personality Alignment
+Fine-tune the model on the generated personality dataset:
+```bash
+python3 posttrain.py
 ```
 
-### 8. Phase 3: Personality Post-Training
-Bake in Raven's dry, direct, and slightly sarcastic tone:
-```bash
-python3 posttrain.py                      # Personality post-training
-```
-
-### 9. Validation & Benchmarks
-Test model accuracy against all evaluation sets:
+### 9. Validation & Evaluation
+Run standard validation checks to inspect model output:
 ```bash
 python3 eval/run_full_eval.py
 ```
-*This prints a scoreboard containing factual accuracy (100 prompts), logical reasoning (50 prompts), and loops/coherence checks.*
+*Prints a summary score across factual questions, simple reasoning checks, and basic text generation.*
 
-### 10. Start the Chat Clients
-Interact with your fully trained RAVEN-2 model via command-line or Gradio web interfaces:
+### 10. Start the Chat Interfaces
+Interact with a trained model checkpoint:
 ```bash
-# Command-Line Client
+# Terminal Interface
 python3 inference.py
 
-# Gradio Web Portal (Developer UI)
+# Basic Web UI
 python3 app.py
 ```
 
@@ -140,27 +192,30 @@ python3 app.py
 
 ## 🎨 Interactive CLI Client Commands
 
-In `inference.py`, the following slash commands are active mid-dialogue:
-* `/mode [name]` - Switches active sampling parameter sets (choices: `precise`, `sharp`, `default`, `chaos`, `cold`).
-* `/modes` - Lists the active temperature, top-k, top-p, and repetition penalty metrics for each mode.
-* `/system [X]` - Updates the guiding instructions defining Raven's personality on the fly.
-* `/stats` - Displays tokens generated, hardware utilization, context lengths, and token/sec speeds.
-* `/reset` - Clears the current dialogue window (up to 5 history turns).
-* `/save` - Exports full conversation logs to a timestamped local text file.
-* `/clear` - Wipes the active terminal screen.
-* `/exit` - Safely closes the chat portal.
+In `inference.py`, the chat interface supports basic back-slash controls during dialogue:
+
+| Command | Action | Explanation |
+| :--- | :--- | :--- |
+| `/mode [name]` | Switch sampling parameters | Switches active presets (`precise`, `sharp`, `default`, `chaos`, `cold`). |
+| `/modes` | View sampling parameters | Lists active temperature, top-k, top-p, and penalty configurations. |
+| `/system [text]` | Modify system prompt | Overrides the current system message context on the fly. |
+| `/stats` | View performance data | Shows generation speeds (tokens per second) and basic parameters. |
+| `/reset` | Reset context | Clears active conversational history (maintains a short rolling context). |
+| `/save` | Save dialogue | Exports conversation history to a local text file. |
+| `/clear` | Clear screen | Clears the active terminal window screen. |
+| `/exit` | Exit client | Closes the command-line interface. |
 
 ---
 
-## ☁️ Google Colab Setup (A100 / T4)
+## ☁️ Google Colab Setup
 
-To train or fine-tune this model on Google Colab, open the corresponding notebooks in `/notebooks/`. Ensure your runtime includes GPU hardware acceleration. The codebase auto-detects `/content/drive` and synchronizes checkpoints every 2000 steps for maximum safety against runtime disconnections.
+Jupyter notebooks are available in `/notebooks/` to set up and run training or fine-tuning workflows in Google Colab. The codebase includes checks to mount `/content/drive` to save intermediate model states during training.
 
 ---
 
-## 🎖️ Production-Grade Implementation Details
+## ⚙️ Implementation Notes
 
-1. **Parameter Constraints Assertion**: `model.py` performs a strict unique parameter calculation at initialization, ensuring `90M <= parameter count <= 115M` holds true (tied embedding parameters are counted only once).
-2. **Epistemic Honesty (Refusal Dataset)**: Specifically contains 2,000 conversational pairs where Raven declines to speculate on real-time news or events outside its scope.
-3. **Loss Masking Guard**: Fine-tuning labels are selectively set to `-100`, which completely blocks gradient backpropagation on system headers and user prompts, forcing the model to learn only how to answer correctly.
-4. **Ctrl+C Interrupt Handler**: Pressing `Ctrl+C` triggers an active signal trap that immediately compiles and saves current model, optimizer, scaler, and history states to a checkpoint file, allowing you to stop training at any time without losing progress.
+* **Parameter Checks**: During initialization, `model.py` checks that unique parameter counts fall within reasonable bounds (`90M <= parameter count <= 115M`) to prevent configuration errors.
+* **Refusal Pairs**: The programmatic instruction builder includes basic refusal templates where the model declines to speculate on real-time facts outside its configuration.
+* **Loss Masking**: Prompt token labels are set to `-100` during fine-tuning so that cross-entropy loss gradients are only calculated for target responses.
+* **Signal Handling**: The training loops catch SIGINT (`Ctrl+C`) to save the current model state and configurations before shutting down.
