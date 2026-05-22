@@ -260,7 +260,7 @@ def main():
         
     # Check if pre-training binary data is ready
     if not os.path.exists(config.train_bin) or not os.path.exists(config.val_bin):
-        print(f"❌ Binary dataset not found at {config.train_bin}. Please run data_prep.py --mode pretrain first.")
+        print(f"❌ Binary dataset not found at {config.train_bin}. Please run data/data_prep.py --mode pretrain first.")
         sys.exit(1)
         
     print("Initialize RAVEN-2 model...")

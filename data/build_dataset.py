@@ -15,8 +15,8 @@ import argparse
 import unicodedata
 from tqdm import tqdm
 
-# Add workspace directory to path
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# Add project root to import path
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import config
 
 # Ratios of target size per source as research-backed by SmolLM / FineWeb-Edu best mix

@@ -11,6 +11,9 @@ import argparse
 import numpy as np
 from tqdm import tqdm
 from tokenizers import Tokenizer
+
+# Add project root to import path
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import config
 
 def get_file_metadata(filepath):

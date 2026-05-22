@@ -308,7 +308,7 @@ def main():
     print(f"  Refusal:        {ref_num:,} pairs")
     print(f"  Edge cases:     {edge_num:,} pairs")
     print("=" * 40)
-    print("✅ Instruction dataset successfully built! Ready for data_prep.py.")
+    print("✅ Instruction dataset successfully built! Ready for data/data_prep.py.")
 
 if __name__ == "__main__":
     main()

@@ -710,7 +710,7 @@ def main():
     print("\nNext steps:")
     print("  1. Merge with knowledge corpus:  cat data/corpus.txt data/personality.txt > data/combined.txt")
     print("  2. Train tokenizer:              python tokenizer_train.py")
-    print("  3. Prepare binary data:          python data_prep.py")
+    print("  3. Prepare binary data:          python data/data_prep.py")
 
 
 if __name__ == "__main__":
