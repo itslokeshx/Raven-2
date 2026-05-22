@@ -16,7 +16,7 @@ The model architecture is configured with standard parameters common to modern o
 | **Context Length (Block Size)** | `1,024` tokens | Maximum sequence length supported by the attention layers |
 | **Embedding Dimension ($d$)** | `768` | Hidden size of the transformer layers |
 | **Query Heads ($N_{\text{head}}$)** | `12` | Number of attention heads for Query projections |
-| **Key/Value Heads ($N_{\text{kv\_head}}$)** | `4` | Key/Value heads shared across Query heads (Group size = 3) |
+| **Key/Value Heads ($N_{\text{kv}}$)** | `4` | Key/Value heads shared across Query heads (Group size = 3) |
 | **Decoder Layers ($N_{\text{layer}}$)** | `12` | Total number of transformer decoder blocks |
 | **Activation Function** | SwiGLU | Swish-Gated Linear Units with `ffn_mult = 4.5` |
 | **Feed-Forward Hidden Dim** | `2,304` | Computed as: $\text{round}(n_{\text{embd}} \times f_{\text{mult}} \times \frac{2}{3 \times 256}) \times 256$ |
