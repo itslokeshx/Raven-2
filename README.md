@@ -37,7 +37,6 @@ Raven-2/
 ├── model.py                      # RMSNorm, RoPE, SwiGLU, GQA, KV Cache & Generation
 ├── requirements.txt              # Project third-party python dependencies
 ├── tokenizer_train.py            # 16K BPE Byte-Level Tokenizer training script
-├── data_prep.py                  # Streaming binary data packer (uint16 memmap & cache)
 ├── train.py                      # Pre-training loop (Cosine Warmup, AMP, Drive, Ctrl+C)
 ├── instruct_tune.py              # Instruction tuning (Loss masking on System/User tokens)
 ├── posttrain.py                  # Personality tuning (Raven sarcastic, dry, direct voice)
@@ -47,7 +46,11 @@ Raven-2/
 ├── README.md                     # Comprehensive architecture manual (this file)
 ├── data/
 │   ├── build_dataset.py          # 40GB high-intelligence HF streaming corpus compiler
-│   └── build_instruct_data.py    # Programmatic 50K high-quality QA dataset generator
+│   ├── build_personality_corpus.py # Programmatic 50K personality training set generator
+│   ├── build_instruct_data.py    # Programmatic 50K high-quality QA dataset generator
+│   ├── download_data.py          # Factual data downloader with filtering & deduplication
+│   ├── combine_to_1gb.py         # Shuffling & chunking raw corpus tool
+│   └── data_prep.py              # Streaming binary data packer (uint16 memmap & cache)
 ├── eval/
 │   ├── knowledge_bench.py        # 100 fact-based Wikipedia QA checks
 │   ├── reasoning_bench.py        # 50 mathematical/logic/analogy checks
@@ -71,8 +74,8 @@ pip3 install -r requirements.txt
 ### 2. Download and Compile Raw Text Corpus
 Run the pre-training corpus compiler to stream and build maximum intelligence:
 ```bash
-python3 build_dataset.py --target_gb 2     # Quick test with 2GB subset
-python3 build_dataset.py --target_gb 40    # Full 40GB SmolLM-mix build
+python3 data/build_dataset.py --target_gb 2     # Quick test with 2GB subset
+python3 data/build_dataset.py --target_gb 40    # Full 40GB SmolLM-mix build
 ```
 
 ### 3. Train the Byte-Level BPE Tokenizer
@@ -92,8 +95,8 @@ python3 data/build_instruct_data.py
 ### 5. Pack Binary Memory-Mapped Files
 Convert textual strings into zero-copy, highly efficient binary uint16 representations for model training:
 ```bash
-python3 data_prep.py --mode pretrain      # Packs checkpoints/train.bin & val.bin
-python3 data_prep.py --mode instruct      # Packs checkpoints/instruct.bin & instruct_val.bin
+python3 data/data_prep.py --mode pretrain      # Packs checkpoints/train.bin & val.bin
+python3 data/data_prep.py --mode instruct      # Packs checkpoints/instruct.bin & instruct_val.bin
 ```
 
 ### 6. Phase 1: Pre-training

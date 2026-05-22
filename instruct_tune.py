@@ -168,7 +168,7 @@ def main():
     # Check if instruct binary data is ready
     val_bin_path = "checkpoints/instruct_val.bin"
     if not os.path.exists(config.instruct_bin) or not os.path.exists(val_bin_path):
-        print(f"❌ Instruction binary dataset not found at {config.instruct_bin}. Please run: python data_prep.py --mode instruct first.")
+        print(f"❌ Instruction binary dataset not found at {config.instruct_bin}. Please run: python data/data_prep.py --mode instruct first.")
         sys.exit(1)
         
     print("Initialize RAVEN-2 model...")

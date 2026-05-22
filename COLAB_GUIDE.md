@@ -60,7 +60,7 @@ Download FineWeb-Edu, Wikipedia, and Cosmopedia v2 directly to the Colab SSD:
 
 ```bash
 # Streams and filters 40GB of factual knowledge base
-!python build_dataset.py --target_gb 40
+!python data/build_dataset.py --target_gb 40
 ```
 *This downloads clean pre-training data directly into `data/corpus.txt`.*
 
@@ -71,7 +71,7 @@ Run the generator directly on Colab to build **19,200,000 dialogue pairs** strea
 
 ```bash
 # Generate 19.2M conversational dialogue pairs (10GB+ personality dataset)
-!python build_personality_corpus.py --count 19200000
+!python data/build_personality_corpus.py --count 19200000
 ```
 > [!TIP]
 > This command will execute streamingly and write the `data/personality.txt` file directly onto Colab's high-speed local disk in **under 2 minutes**.
@@ -115,10 +115,10 @@ Stream the combined text file and pack it into high-speed memory-mapped binary `
 
 ```bash
 # 1. Compile pre-training binaries (generates checkpoints/train.bin and checkpoints/val.bin)
-!python data_prep.py --mode pretrain
+!python data/data_prep.py --mode pretrain
 
 # 2. Compile instruction binaries (generates checkpoints/instruct.bin)
-!python data_prep.py --mode instruct
+!python data/data_prep.py --mode instruct
 ```
 
 ---
@@ -128,7 +128,7 @@ Pre-train your 100M parameter model! The training script automatically backs up 
 
 ```bash
 # Start pre-training with Flash Attention, Mixed Precision, and Google Drive auto-backup
-!python pretrain.py
+!python train.py
 ```
 
 ---
