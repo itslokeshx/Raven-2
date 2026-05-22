@@ -404,6 +404,18 @@ USER_REPHRASES = {
         "btw {base}",
         "ok so {base}",
         "just saying {base}",
+        "hey, {base}?",
+        "so, {base}",
+        "tell me, {base}",
+        "quick question: {base}",
+        "hey raven, quick thing: {base}",
+        "just wondering, {base}",
+        "honest opinion on this: {base}",
+        "{base}, right?",
+        "quick check, {base}",
+        "so raven, {base}",
+        "yo, {base}...",
+        "{base} - thoughts?",
     ],
     "tech": [
         "{base}",
@@ -414,6 +426,18 @@ USER_REPHRASES = {
         "help me understand {base}",
         "i need to know about {base}",
         "what do you know about {base}",
+        "explain {base} like I'm a junior dev",
+        "briefly explain {base}",
+        "can you break down {base}?",
+        "what is the core concept of {base}?",
+        "what is the deal with {base}?",
+        "how should I think about {base}?",
+        "simplify {base} for me",
+        "what is {base} in plain terms?",
+        "give me the quick rundown on {base}",
+        "how do you implement {base}?",
+        "tell me about {base} in software engineering",
+        "core definition of {base}?",
     ],
     "philosophy": [
         "{base}",
@@ -423,6 +447,16 @@ USER_REPHRASES = {
         "serious question: {base}",
         "genuine question — {base}",
         "i've been wondering about {base}",
+        "deep question: {base}",
+        "what's the philosophical view on {base}?",
+        "have you reasoned through {base}?",
+        "honest take on {base}",
+        "let's talk about {base}",
+        "how do we make sense of {base}?",
+        "what is the absolute truth about {base}?",
+        "existential check: {base}",
+        "philosophically speaking, {base}",
+        "give me a dry perspective on {base}",
     ],
     "knowledge": [
         "{base}",
@@ -432,21 +466,44 @@ USER_REPHRASES = {
         "what is {base} exactly",
         "i want to understand {base}",
         "break down {base} for me",
+        "give me the facts on {base}",
+        "what is the science behind {base}?",
+        "how does {base} actually function?",
+        "explain the mechanism of {base}",
+        "what are the fundamentals of {base}?",
+        "explain {base} simply",
+        "can you summarize {base}?",
+        "what's the deal with {base}?",
+        "give me the high-level explanation of {base}",
     ],
 }
 
 # Response openers — rotate to avoid every response starting the same way
 RESPONSE_OPENERS = [
-    "",   # no opener (most common — just start the answer)
-    "",
-    "",
-    "",
+    "", "", "", "", "", "", "", "", # empty is most common
     "Short answer: ",
     "Honest answer: ",
     "Direct answer: ",
     "Real answer: ",
+    "Look: ",
+    "Simple: ",
+    "Basically, ",
+    "Here's the deal: ",
 ]
 
+# Response closers — occasionally append to keep tone dry and diverse
+RESPONSE_CLOSERS = [
+    "", "", "", "", "", "", "", "", # empty is most common
+    " Make sense?",
+    " Simple as that.",
+    " Go figure.",
+    " Think about it.",
+    " No filler needed.",
+    " Next question.",
+    " That's the baseline.",
+    " Period.",
+    " Done.",
+]
 
 def augment_user(text: str, category: str) -> str:
     """Apply a random rephrasing template to user turn."""
@@ -458,12 +515,22 @@ def augment_user(text: str, category: str) -> str:
         return result
     return result[0].upper() + result[1:] if result else result
 
-
 def augment_response(text: str) -> str:
-    """Occasionally prepend a response opener."""
+    """Occasionally prepend an opener or append a dry closer."""
+    # Prepend opener
     opener = random.choice(RESPONSE_OPENERS)
     if opener:
-        return opener + text[0].lower() + text[1:]
+        text = opener + text[0].lower() + text[1:]
+        
+    # Append closer
+    closer = random.choice(RESPONSE_CLOSERS)
+    if closer and not text.endswith(tuple(RESPONSE_CLOSERS)):
+        # Make sure we insert before final punctuation if it's already there
+        if text.endswith("."):
+            text = text[:-1] + closer
+        else:
+            text = text + closer
+            
     return text
 
 
