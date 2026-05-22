@@ -236,18 +236,160 @@ def validate_dataset(filepath):
     print("=" * 55)
     print("✅ Quality scans complete! Ready for tokenization.\n")
 
+def combine_local_corpora(dest_filepath):
+    """Scan and streamingly merge 4 local corpus files into dest_filepath.
+    Applies unicode cleaning, quality filtering, and deduplication.
+    """
+    # 1. Look for candidates
+    candidates = []
+    search_dirs = [".", "data"]
+    variations = [
+        "corpus_{}.txt", "corpus{}.txt", "corpus {}.txt", "corpus-{}.txt"
+    ]
+    
+    for i in range(1, 5):
+        found = False
+        for sdir in search_dirs:
+            for var in variations:
+                path = os.path.join(sdir, var.format(i))
+                if os.path.exists(path):
+                    candidates.append(path)
+                    found = True
+                    break
+            if found:
+                break
+                
+    if not candidates:
+        # Fallback search for any corpus-like files in current directory or data
+        print("⚠️ Specific corpus_1 to corpus_4 files not found. Searching for any corpus*.txt files...")
+        for sdir in search_dirs:
+            if not os.path.exists(sdir):
+                continue
+            for f in os.listdir(sdir):
+                if f.startswith("corpus") and f.endswith(".txt") and f != "corpus.txt":
+                    candidates.append(os.path.join(sdir, f))
+                    
+    if not candidates:
+        print("❌ No local corpus files (corpus_1 to corpus_4 or corpus*.txt) found to combine.")
+        print("Please place your files in the workspace (e.g. data/corpus_1.txt) and try again.")
+        sys.exit(1)
+        
+    # Sort files naturally
+    candidates = sorted(list(set(candidates)))
+    
+    print("\n" + "=" * 60)
+    print(" 🛠️  RAVEN-2 CORPUS MERGER & COMPILER")
+    print(f" Found {len(candidates)} files to combine:")
+    for c in candidates:
+        sz_mb = os.path.getsize(c) / (1024**2)
+        print(f"  - {c} ({sz_mb:.2f} MB)")
+    print(f" Destination: {dest_filepath}")
+    print("=" * 60 + "\n")
+    
+    # Rebuild dedup set
+    dedup_hashes = rebuild_dedup_set(dest_filepath)
+    
+    # Open destination file in append mode
+    with open(dest_filepath, "a", encoding="utf-8") as out_file:
+        write_buffer = []
+        buffer_size_chars = 0
+        LIMIT_BUFFER_BYTES = 8 * 1024 * 1024 # 8MB
+        
+        for filepath in candidates:
+            print(f"\nMerging {filepath} streamingly...")
+            total_size = os.path.getsize(filepath)
+            
+            # Read in 10MB blocks
+            chunk_size = 10 * 1024 * 1024
+            buffer = ""
+            
+            with open(filepath, "r", encoding="utf-8", errors="ignore") as f, tqdm(
+                total=total_size, unit='B', unit_scale=True, desc=f"Processing {os.path.basename(filepath)}"
+            ) as pbar:
+                while True:
+                    chunk = f.read(chunk_size)
+                    if not chunk:
+                        break
+                    pbar.update(len(chunk.encode("utf-8")))
+                    buffer += chunk
+                    
+                    # Split by <|eos|> first
+                    if "<|eos|>" in buffer:
+                        docs = buffer.split("<|eos|>")
+                        buffer = docs.pop()
+                    else:
+                        # Fallback if no <|eos|>: split by double newlines (paragraphs)
+                        # but keep last paragraph in buffer to avoid cut-off
+                        docs = buffer.split("\n\n")
+                        buffer = docs.pop()
+                        
+                    for doc in docs:
+                        clean_doc = clean_unicode(doc)
+                        clean_doc = clean_boilerplate(clean_doc)
+                        clean_doc = normalize_whitespace(clean_doc)
+                        
+                        if not is_high_quality(clean_doc):
+                            continue
+                            
+                        doc_hash = get_prefix_hash(clean_doc)
+                        if doc_hash in dedup_hashes:
+                            continue
+                            
+                        dedup_hashes.add(doc_hash)
+                        
+                        formatted_doc = f"{clean_doc}<|eos|>\n\n"
+                        write_buffer.append(formatted_doc)
+                        buffer_size_chars += len(formatted_doc)
+                        
+                        if buffer_size_chars >= LIMIT_BUFFER_BYTES:
+                            out_file.write("".join(write_buffer))
+                            out_file.flush()
+                            os.fsync(out_file.fileno())
+                            write_buffer = []
+                            buffer_size_chars = 0
+                            
+                # Process remaining buffer content as the final document
+                if buffer.strip():
+                    clean_doc = clean_unicode(buffer)
+                    clean_doc = clean_boilerplate(clean_doc)
+                    clean_doc = normalize_whitespace(clean_doc)
+                    if is_high_quality(clean_doc):
+                        doc_hash = get_prefix_hash(clean_doc)
+                        if doc_hash not in dedup_hashes:
+                            dedup_hashes.add(doc_hash)
+                            formatted_doc = f"{clean_doc}<|eos|>\n\n"
+                            write_buffer.append(formatted_doc)
+                            
+            # Flush at the end of each file
+            if write_buffer:
+                out_file.write("".join(write_buffer))
+                out_file.flush()
+                os.fsync(out_file.fileno())
+                write_buffer = []
+                buffer_size_chars = 0
+                
+            print(f"✅ Finished merging {filepath}")
+            
+    print("\n🎉 LOCAL CORPORA COMBINATION COMPLETED SUCCESSFULLY!")
+    validate_dataset(dest_filepath)
+
 def main():
     parser = argparse.ArgumentParser(description="RAVEN-2 40GB High-Intelligence Dataset Compiler")
     parser.add_argument("--target_gb", type=float, default=40.0, help="Target total corpus size in GB (default: 40.0)")
     parser.add_argument("--source", type=str, default="all", choices=["all", "fineweb-edu", "wikipedia", "cosmopedia", "gutenberg"],
                         help="Train single source or download all combined (default: all)")
     parser.add_argument("--validate", action="store_true", help="Scan existing data/corpus.txt and output detailed stats")
+    parser.add_argument("--combine", action="store_true", help="Merge local files corpus_1.txt to corpus_4.txt streamingly with cleaning")
     args = parser.parse_args()
     
     corpus_path = "data/corpus.txt"
     
     if args.validate:
         validate_dataset(corpus_path)
+        return
+        
+    if args.combine:
+        combine_local_corpora(corpus_path)
         return
         
     os.makedirs("data", exist_ok=True)

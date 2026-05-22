@@ -46,7 +46,7 @@ Raven-2/
 ├── .gitignore                    # Version control ignore files
 ├── README.md                     # Comprehensive architecture manual (this file)
 ├── data/
-│   ├── download_data.py          # Wikipedia/Gutenberg streaming corpus builder
+│   ├── build_dataset.py          # 40GB high-intelligence HF streaming corpus compiler
 │   └── build_instruct_data.py    # Programmatic 50K high-quality QA dataset generator
 ├── eval/
 │   ├── knowledge_bench.py        # 100 fact-based Wikipedia QA checks
@@ -69,10 +69,10 @@ pip3 install -r requirements.txt
 ```
 
 ### 2. Download and Compile Raw Text Corpus
-Run the pre-training corpus compiler to fetch articles and books:
+Run the pre-training corpus compiler to stream and build maximum intelligence:
 ```bash
-python3 data/download_data.py --dry-run   # Quick local dry-run
-python3 data/download_data.py             # Full production-grade download (~2.5GB)
+python3 build_dataset.py --target_gb 2     # Quick test with 2GB subset
+python3 build_dataset.py --target_gb 40    # Full 40GB SmolLM-mix build
 ```
 
 ### 3. Train the Byte-Level BPE Tokenizer
