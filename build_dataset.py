@@ -141,40 +141,127 @@ def backup_to_drive(filepath):
 
 def get_dataset_stream(source):
     """Resilient, streaming loaders for all four designated data subsets.
+    Uses trust_remote_code for maximum compatibility with HuggingFace datasets.
     """
     from datasets import load_dataset
     
+    kwargs = {"streaming": True, "trust_remote_code": True}
+    
     if source == "fineweb-edu":
         # Stream high-quality educational web corpus subset
-        return load_dataset("HuggingFaceFW/fineweb-edu", name="sample-10BT", split="train", streaming=True)
+        print("  → Connecting to HuggingFace CDN for fineweb-edu (sample-10BT)...")
+        return load_dataset("HuggingFaceFW/fineweb-edu", name="sample-10BT", split="train", **kwargs)
     elif source == "wikipedia":
         # Stream Wikipedia EN via the modern wikimedia/wikipedia dataset (Parquet format)
-        return load_dataset("wikimedia/wikipedia", "20231101.en", split="train", streaming=True)
+        print("  → Connecting to HuggingFace CDN for Wikipedia EN...")
+        return load_dataset("wikimedia/wikipedia", "20231101.en", split="train", **kwargs)
     elif source == "cosmopedia":
         # Stream Mixtral-generated textbook synthetic corpus
-        return load_dataset("HuggingFaceTB/cosmopedia-v2", name="cosmopedia-v2", split="train", streaming=True)
+        print("  → Connecting to HuggingFace CDN for Cosmopedia v2...")
+        return load_dataset("HuggingFaceTB/cosmopedia-v2", name="cosmopedia-v2", split="train", **kwargs)
     elif source == "gutenberg":
         # Stream Project Gutenberg books via the modern sedthh/gutenberg_english dataset (Parquet format)
-        return load_dataset("sedthh/gutenberg_english", split="train", streaming=True)
+        print("  → Connecting to HuggingFace CDN for Project Gutenberg...")
+        return load_dataset("sedthh/gutenberg_english", split="train", **kwargs)
     else:
         raise ValueError(f"Unknown dataset source: {source}")
 
-def iterate_with_retry(stream, retries=5, delay=5):
-    """Iterator wrapper that recovers from connection drops or HuggingFace API rate limits.
+def get_fast_dataset(source, target_gb):
+    """High-speed parallel downloader for Colab multi-gigabit network.
+    Queries the dataset repository, calculates the precise number of parquet files
+    needed, and downloads them in parallel using multi-threaded downloads.
     """
-    iterator = iter(stream)
-    while True:
+    from huggingface_hub import HfApi
+    from datasets import load_dataset
+    import math
+    
+    api = HfApi()
+    
+    # Map sources to repo IDs, file folders, and average uncompressed text yields per file
+    if source == "fineweb-edu":
+        repo_id = "HuggingFaceFW/fineweb-edu"
+        pattern = "sample/10BT/"
+        name = "sample-10BT"
+        mb_per_file = 42 # Average text yield per parquet file
+    elif source == "wikipedia":
+        repo_id = "wikimedia/wikipedia"
+        pattern = "20231101.en/"
+        name = "20231101.en"
+        mb_per_file = 22
+    elif source == "cosmopedia":
+        repo_id = "HuggingFaceTB/cosmopedia-v2"
+        pattern = "data/"
+        name = "cosmopedia-v2"
+        mb_per_file = 32
+    elif source == "gutenberg":
+        repo_id = "sedthh/gutenberg_english"
+        pattern = "data/"
+        name = "default"
+        mb_per_file = 48
+    else:
+        raise ValueError(f"Unknown source: {source}")
+        
+    print(f"\n🔍 Resolving repository files for {source.upper()} from HuggingFace Hub...")
+    try:
+        all_files = api.list_repo_files(repo_id=repo_id, repo_type="dataset")
+        # Filter for parquet files matching the pattern
+        parquet_files = [f for f in all_files if pattern in f and f.endswith(".parquet")]
+        parquet_files.sort()
+        
+        if not parquet_files:
+            print(f"⚠️ No matching files found under pattern '{pattern}'. Reverting to stream.")
+            return None
+            
+        # Calculate files needed with 35% safety margin to guarantee target size is met
+        target_mb = target_gb * 1024 * 1.35
+        num_files_needed = max(1, math.ceil(target_mb / mb_per_file))
+        selected_files = parquet_files[:num_files_needed]
+        
+        print(f"🚀 Selected {len(selected_files)}/{len(parquet_files)} parquet shards (~{len(selected_files)*mb_per_file:.1f} MB text equivalent).")
+        print(f"📥 Initiating multi-threaded parallel download via HuggingFace parallel backend...")
+        
+        # This will download the files locally at max speed using Hugging Face's optimized parallel downloader
+        dataset = load_dataset(repo_id, name=name, data_files=selected_files, split="train", trust_remote_code=True)
+        print(f"✅ Local download complete! Dataset initialized with {len(dataset):,} rows.")
+        return dataset
+    except Exception as e:
+        print(f"⚠️ Parallel download failed: {e}")
+        print("🔄 Falling back to streaming mode...")
+        return None
+
+def iterate_with_retry(source_name, stream_factory, max_retries=10, delay=10):
+    """Iterator wrapper that recovers from connection drops by re-creating the stream.
+    stream_factory is a callable that returns a fresh dataset stream.
+    """
+    retries = 0
+    skip_count = 0  # Track how many items to skip on reconnect
+    
+    while retries <= max_retries:
         try:
-            item = next(iterator)
-            yield item
+            stream = stream_factory()
+            iterator = iter(stream)
+            
+            # Skip already-yielded items on reconnect
+            for _ in range(skip_count):
+                next(iterator)
+            
+            for item in iterator:
+                skip_count += 1
+                yield item
+            
+            # Clean exit — dataset exhausted
+            return
+            
         except StopIteration:
-            break
+            return
         except Exception as e:
-            if retries <= 0:
+            retries += 1
+            if retries > max_retries:
+                print(f"\n❌ Max retries ({max_retries}) exceeded. Last error: {e}")
                 raise e
-            print(f"\n⚠️ HF Connection drop: {e}. Re-connecting in {delay}s... ({retries} retries left)")
+            print(f"\n⚠️ HF Connection drop on {source_name}: {e}")
+            print(f"   Re-connecting in {delay}s... (retry {retries}/{max_retries}, will skip {skip_count} already-processed items)")
             time.sleep(delay)
-            retries -= 1
 
 def validate_dataset(filepath):
     """Validates the compiled binary-text corpus and prints standard quality control stats.
@@ -458,28 +545,51 @@ def main():
                 print(f"✨ Skipping already completed source: {source}")
                 continue
                 
-            print(f"📥 Loading stream for source: {source.upper()}...")
-            stream = get_dataset_stream(source)
+            source_target_bytes = source_targets[source]
+            source_gb = source_target_bytes / (1024**3)
+            
+            # Try to get the high-speed local dataset first (resolves and downloads shards in parallel)
+            dataset = get_fast_dataset(source, source_gb)
             
             source_written_bytes = 0
-            source_target_bytes = source_targets[source]
             
-            pbar = tqdm(total=source_target_bytes, unit='B', unit_scale=True, desc=f"Streaming {source}")
+            # Live activity counters
+            docs_scanned = 0
+            docs_filtered = 0
+            docs_deduped = 0
+            docs_accepted = 0
             
-            # Streaming loop
-            for doc in iterate_with_retry(stream):
+            pbar = tqdm(total=source_target_bytes, unit='B', unit_scale=True, desc=f"Compiling {source}")
+            
+            # Use local fast iterator if available, otherwise fall back to resilient stream
+            if dataset is not None:
+                print(f"  ⚡ Local high-speed iteration enabled. Processing {len(dataset):,} rows...")
+                iterator = dataset
+            else:
+                print(f"  📥 Loading stream for source: {source.upper()}...")
+                print(f"  ⏳ Waiting for first documents from HuggingFace CDN (Streaming)...")
+                def make_stream(src=source):
+                    return get_dataset_stream(src)
+                iterator = iterate_with_retry(source, make_stream)
+            
+            # Unified processing loop (runs at lightspeed for local iteration)
+            for doc in iterator:
                 if source_written_bytes >= source_target_bytes:
                     break
+                
+                docs_scanned += 1
+                
+                # Heartbeat: show activity every 1000 docs scanned even if none accepted yet
+                if docs_scanned % 1000 == 0 and docs_accepted == 0:
+                    print(f"  🔍 Scanned {docs_scanned:,} docs | Filtered: {docs_filtered:,} | Deduped: {docs_deduped:,} | Accepted: {docs_accepted:,}")
+                elif docs_scanned % 50000 == 0:
+                    print(f"  📊 Scanned {docs_scanned:,} | Accepted: {docs_accepted:,} | Filtered: {docs_filtered:,} | Deduped: {docs_deduped:,} | Written: {source_written_bytes/(1024**3):.2f}GB")
                     
-                # Extract raw text depending on schema standard
-                if source == "gutenberg":
-                    raw_text = doc.get("text", "")
-                elif source == "wikipedia":
-                    raw_text = doc.get("text", "")
-                else:
-                    raw_text = doc.get("text", "")
+                # Extract raw text
+                raw_text = doc.get("text", "")
                     
                 if not raw_text:
+                    docs_filtered += 1
                     continue
                     
                 # Clean pipelines
@@ -489,14 +599,21 @@ def main():
                 
                 # Check quality bar
                 if not is_high_quality(text):
+                    docs_filtered += 1
                     continue
                     
                 # Deduplication check
                 doc_hash = get_prefix_hash(text)
                 if doc_hash in dedup_hashes:
+                    docs_deduped += 1
                     continue
                     
                 dedup_hashes.add(doc_hash)
+                docs_accepted += 1
+                
+                # Print confirmation when first doc is accepted
+                if docs_accepted == 1:
+                    print(f"  ✅ First document accepted! (scanned {docs_scanned:,} docs to get here). Streaming is LIVE!")
                 
                 # Format document block
                 formatted_doc = f"{text}<|eos|>\n\n"
@@ -519,6 +636,7 @@ def main():
                     buffer_size_chars = 0
                     
             pbar.close()
+            print(f"  📊 Final: Scanned {docs_scanned:,} | Accepted {docs_accepted:,} | Filtered {docs_filtered:,} | Deduped {docs_deduped:,}")
             
             # Flush remainder write buffer blocks
             if write_buffer:
