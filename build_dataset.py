@@ -148,14 +148,14 @@ def get_dataset_stream(source):
         # Stream high-quality educational web corpus subset
         return load_dataset("HuggingFaceFW/fineweb-edu", name="sample-10BT", split="train", streaming=True)
     elif source == "wikipedia":
-        # Stream Wikipedia EN
-        return load_dataset("wikipedia", "20220301.en", split="train", streaming=True, trust_remote_code=True)
+        # Stream Wikipedia EN via the modern wikimedia/wikipedia dataset (Parquet format)
+        return load_dataset("wikimedia/wikipedia", "20231101.en", split="train", streaming=True)
     elif source == "cosmopedia":
         # Stream Mixtral-generated textbook synthetic corpus
-        return load_dataset("HuggingFaceTB/cosmopedia-v2", split="train", streaming=True)
+        return load_dataset("HuggingFaceTB/cosmopedia-v2", name="cosmopedia-v2", split="train", streaming=True)
     elif source == "gutenberg":
-        # Stream Project Gutenberg books
-        return load_dataset("pg19", split="train", streaming=True)
+        # Stream Project Gutenberg books via the modern sedthh/gutenberg_english dataset (Parquet format)
+        return load_dataset("sedthh/gutenberg_english", split="train", streaming=True)
     else:
         raise ValueError(f"Unknown dataset source: {source}")
 
