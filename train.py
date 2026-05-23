@@ -18,7 +18,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 import config
-from model import Raven2
+from model import Raven2, RMSNorm
 
 # Global reference to model/optimizer/scaler for Ctrl+C handler
 training_state = {
@@ -241,12 +241,17 @@ def estimate_loss(model, dataloader, eval_iters, pad_id):
     return losses.mean().item()
 
 
-def main():
+def main(args=None):
+    if args is None:
+        import sys
+        if any("ipykernel" in arg for arg in sys.argv):
+            args = []
+            
     parser = argparse.ArgumentParser(description="RAVEN-2 Model Pre-training")
     parser.add_argument("--resume", action="store_true", help="Resume from latest checkpoint")
     parser.add_argument("--dry-run", action="store_true", help="Dry run with 20 steps only for testing")
     parser.add_argument("--steps", type=int, default=None, help="Force override total pre-training steps")
-    args = parser.parse_args()
+    args = parser.parse_args(args)
     
     # 1. Setup config overrides
     max_steps = config.max_iters

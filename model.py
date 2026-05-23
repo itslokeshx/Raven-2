@@ -114,8 +114,8 @@ class CausalSelfAttention(nn.Module):
         # Update KV cache
         if past_kv is not None:
             past_k, past_v = past_kv
-            k = torch.cat([past_k, k], dim=-1)
-            v = torch.cat([past_v, v], dim=-1)
+            k = torch.cat([past_k, k], dim=2)
+            v = torch.cat([past_v, v], dim=2)
             
         present_kv = (k, v)
         
@@ -245,7 +245,7 @@ class Raven2(nn.Module):
         # If position_ids is None, create it dynamically
         if position_ids is None:
             if past_kvs is not None and past_kvs[0] is not None:
-                past_length = past_kvs[0][0].shape[-1]
+                past_length = past_kvs[0][0].shape[2]
                 position_ids = torch.arange(past_length, past_length + seq_len, dtype=torch.long, device=idx.device).unsqueeze(0)
             else:
                 position_ids = torch.arange(0, seq_len, dtype=torch.long, device=idx.device).unsqueeze(0)
@@ -314,7 +314,7 @@ class Raven2(nn.Module):
         batch = idx.size(0)
         
         generated = []
-        past_kvs = None if use_kv_cache else None
+        past_kvs = None
         
         # Store context tokens for repetition penalty tracking
         context_tokens = idx.clone()
