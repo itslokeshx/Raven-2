@@ -149,11 +149,16 @@ def estimate_instruct_loss(model, dataloader, eval_iters):
     return losses.mean().item()
 
 
-def main():
+def main(args=None):
+    if args is None:
+        import sys
+        if any("ipykernel" in arg for arg in sys.argv):
+            args = []
+            
     parser = argparse.ArgumentParser(description="RAVEN-2 Model Instruction Fine-tuning")
     parser.add_argument("--resume", action="store_true", help="Resume from latest instruct checkpoint")
     parser.add_argument("--dry-run", action="store_true", help="Dry run with 20 steps only for testing")
-    args = parser.parse_args()
+    args = parser.parse_args(args)
     
     max_steps = config.instruct_max_iters
     eval_interval = config.eval_interval

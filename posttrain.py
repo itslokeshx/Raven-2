@@ -134,11 +134,16 @@ def print_before_after(model, tokenizer_path, base_weights_exist):
         print("-" * 70)
 
 
-def main():
+def main(args=None):
+    if args is None:
+        import sys
+        if any("ipykernel" in arg for arg in sys.argv):
+            args = []
+            
     parser = argparse.ArgumentParser(description="RAVEN-2 Model Personality Post-training")
     parser.add_argument("--resume", action="store_true", help="Resume from latest posttrain checkpoint")
     parser.add_argument("--dry-run", action="store_true", help="Dry run with 20 steps only for testing")
-    args = parser.parse_args()
+    args = parser.parse_args(args)
     
     max_steps = config.posttrain_max_iters
     eval_interval = 250
@@ -159,6 +164,10 @@ def main():
         print(f"⚠️ Personality posttrain binary dataset not found at {posttrain_bin_path}.")
         print(f"Falling back to instruction tuning binary dataset {config.instruct_bin} for style training.")
         posttrain_bin_path = config.instruct_bin
+        val_bin_path = "checkpoints/instruct_val.bin"
+    elif not os.path.exists(val_bin_path):
+        print(f"⚠️ Personality posttrain validation dataset not found at {val_bin_path}.")
+        print(f"Falling back to instruction validation dataset checkpoints/instruct_val.bin.")
         val_bin_path = "checkpoints/instruct_val.bin"
         
     if not os.path.exists(posttrain_bin_path):

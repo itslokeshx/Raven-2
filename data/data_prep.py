@@ -122,13 +122,18 @@ def stream_samples_from_file(filepath, mode):
                     # If not JSONL, fallback to treating the line as raw text
                     yield line
 
-def main():
+def main(args=None):
+    if args is None:
+        import sys
+        if any("ipykernel" in arg for arg in sys.argv):
+            args = []
+            
     parser = argparse.ArgumentParser(description="Prepare RAVEN-2 binary dataset.")
     parser.add_argument("--mode", type=str, required=True, choices=["pretrain", "instruct"],
                         help="Data preparation mode: pretrain or instruct")
     parser.add_argument("--inputs", nargs="+", default=None,
                         help="Input file paths (default: data/corpus.txt for pretrain, data/instruct.txt for instruct)")
-    args = parser.parse_args()
+    args = parser.parse_args(args)
     
     # Set default inputs
     if args.inputs is None:

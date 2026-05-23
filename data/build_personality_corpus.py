@@ -684,7 +684,12 @@ def preview_samples(n: int = 10):
 # ENTRY POINT
 # ══════════════════════════════════════════════════════════════════════════════
 
-def main():
+def main(args=None):
+    if args is None:
+        import sys
+        if any("ipykernel" in arg for arg in sys.argv):
+            args = []
+            
     parser = argparse.ArgumentParser(
         description="Raven-2 Personality Corpus Builder"
     )
@@ -699,7 +704,7 @@ def main():
         action="store_true",
         help="Preview sample pairs from each category without writing",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(args)
 
     if args.preview:
         preview_samples(n=3)
