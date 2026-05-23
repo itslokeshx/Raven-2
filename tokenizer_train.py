@@ -80,7 +80,12 @@ def verify_tokenizer(path):
     print(f"Decoded:     '{decoded}'")
     print("=" * 40)
 
-if __name__ == "__main__":
+def main(args=None):
+    if args is None:
+        import sys
+        if any("ipykernel" in arg for arg in sys.argv):
+            args = []
+            
     parser = argparse.ArgumentParser(description="Train Byte-Level BPE Tokenizer for RAVEN-2")
     parser.add_argument(
         "--input", 
@@ -94,7 +99,7 @@ if __name__ == "__main__":
         default=config.tokenizer_path, 
         help="Path to save tokenizer JSON (default from config)"
     )
-    args = parser.parse_args()
+    args = parser.parse_args(args)
     
     # For standalone test, if corpus doesn't exist, create a dummy corpus to verify
     if not os.path.exists(args.input):
@@ -111,3 +116,6 @@ if __name__ == "__main__":
             f.write(mock_text)
             
     train_tokenizer(args.input, args.output)
+
+if __name__ == "__main__":
+    main()
